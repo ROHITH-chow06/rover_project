@@ -23,7 +23,9 @@ setup(
         ],
     },
     entry_points={
-        'console_scripts': ['detector_node = rover_perception.detector_node:main',
-        ],
+        'console_scripts': [
+    'detector_node = rover_perception.detector_node:main',
+    'agent_node = rover_perception.agent_node:main',
+],
     },
 )
