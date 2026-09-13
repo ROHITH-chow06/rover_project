@@ -18,6 +18,7 @@ class DetectorNode(Node):
 
     def image_callback(self, msg):
         frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+        frame_area = frame.shape[0] * frame.shape[1]
         results = self.model(frame, verbose=False)
         detections = []
         for r in results:
@@ -25,8 +26,16 @@ class DetectorNode(Node):
                 cls_name = self.model.names[int(box.cls[0])]
                 conf = float(box.conf[0])
                 if conf > 0.5:
-                    detections.append({'label': cls_name, 'confidence': round(conf, 2)})
-                    self.get_logger().info(f'Detected: {cls_name} ({conf:.2f})')
+                    x1, y1, x2, y2 = box.xyxy[0].tolist()
+                    box_area = (x2 - x1) * (y2 - y1)
+                    size_fraction = round(box_area / frame_area, 4)
+                    detections.append({
+                        'label': cls_name,
+                        'confidence': round(conf, 2),
+                        'size_fraction': size_fraction
+                    })
+                    self.get_logger().info(
+                        f'Detected: {cls_name} ({conf:.2f}) size={size_fraction:.3f}')
         msg_out = String()
         msg_out.data = json.dumps(detections)
         self.pub.publish(msg_out)
