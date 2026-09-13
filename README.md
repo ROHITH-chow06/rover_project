@@ -8,6 +8,32 @@
 
 ---
 
+## 🎥 Demo
+
+<p align="center">
+  <img src="assets/demo.gif" alt="Agentic Autonomous Rover demonstration" width="800">
+</p>
+
+### Full Demonstration Video
+
+▶️ **[Watch the complete rover demonstration on YouTube](https://youtu.be/LfWJM-UIUWU?si=ETq_O5paqUVPjlSv)**
+
+The demonstration shows the current end-to-end simulation cycle:
+
+**instruction → search → object detection → target confirmation → agentic approach → arrival → stop**
+
+---
+
+## 🔗 Related Project
+
+The long-term physical platform for this software architecture is the **DRISHTI rover**.
+
+🛠️ **[DRISHTI Rover — GitHub Repository](https://github.com/ROHITH-chow06/SIH-DRISHTI)**
+
+The current repository focuses on the simulation-side autonomous rover architecture, while the DRISHTI repository contains the related physical-rover project.
+
+---
+
 ## Overview
 
 The **Agentic Autonomous Rover** explores how a mobile robot can move beyond fixed waypoints and hard-coded task sequences by combining:
@@ -395,7 +421,7 @@ The project is therefore progressing toward:
 
 > **Simulation → Integrated software stack → Physical DRISHTI rover → Autonomous physical system**
 
-> **DRISHTI GitHub repository:** _link to be added once the correct repository URL is provided._
+> 🛠️ **DRISHTI GitHub repository:** [ROHITH-chow06/SIH-DRISHTI](https://github.com/ROHITH-chow06/SIH-DRISHTI)
 
 ---
 
@@ -501,24 +527,6 @@ The system then:
 8. Receives a structured approach decision.
 9. Publishes velocity commands.
 10. Stops when the deterministic proximity condition is satisfied.
-
----
-
-## 🎥 Demo
-
-The current simulated demonstration shows the end-to-end cycle:
-
-**instruction → search → detection → target confirmation → agentic approach → arrival → stop**
-
-### Demo Preview
-
-<p align="center">
-  <img src="assets/demo.gif" alt="Agentic Autonomous Rover demonstration" width="800">
-</p>
-
-### Full Demonstration Video
-
-The GIF above is a short preview of the recorded simulation. The complete video can be added as a GitHub video or external video link when its final location is available.
 
 ---
 
