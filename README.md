@@ -1,89 +1,147 @@
-# Autonomous Rover Project
+# Agentic Autonomous Rover
+
+## Project Brief
+A simulated rover that combines classical robotics perception/control with an
+LLM-based reasoning layer, so it can carry out plain-language instructions
+("find a cup and go to it") rather than pre-programmed waypoints.
+
+## Tech Stack
+- **OS / middleware:** Ubuntu 24.04, ROS2 Jazzy
+- **Simulation:** Gazebo Sim (via ros_gz)
+- **Perception:** YOLOv8 (Ultralytics), OpenCV, cv_bridge
+- **Reasoning layer:** Google Gemini API (gemini-3.1-flash-lite, free tier)
+- **Language:** Python 3.12
+- **Version control:** Git / GitHub
+
+## Architecture
+1. **Perception** (`detector_node`) — subscribes to the robot's camera feed,
+   runs YOLOv8 object detection, publishes structured JSON (label,
+   confidence, bounding-box size as a distance proxy) on `/detected_objects`
+2. **Reasoning** (`agent_node`) — accepts live typed instructions, tracks
+   current detections, and calls an LLM only when a target is genuinely
+   found (not on every tick) to decide how to approach it
+3. **Exploration** — deterministic scan-and-advance search pattern when no
+   target is in view (no LLM call, free and instant)
+4. **Control** — decisions converted to `TwistStamped` velocity commands
+   published to `/cmd_vel`, driving the robot in Gazebo
+
 ## Week 1 — Environment Setup
 - ROS2 Jazzy + Gazebo + Nav2 installed on Ubuntu 24.04
 - TurtleBot3 sim running, keyboard teleop working
-- Nav2 autonomous navigation working: AMCL localizes robot via particle
-  filter matching lidar data to map, Nav2 plans path to clicked goal
-----------------------------------------------------------------------------
+- Nav2 autonomous navigation confirmed working: AMCL localizes the robot via
+  particle-filter matching of lidar data to a map, Nav2 plans a path to a
+  clicked goal
+
 ## Week 2 — Perception
 - Added custom ROS2 package `rover_perception`
 - Camera feed confirmed working via rqt_image_view
-- Built `detector_node`: subscribes to /camera/image_raw, runs YOLOv8 (pretrained,
-  ultralytics), publishes detections as JSON on /detected_objects
-- Applied confidence threshold (>0.5) to filter noisy low-confidence detections
-- Resolved dependency conflicts: pinned numpy==1.26.4 and opencv-python==4.9.0.80
-  (newer versions of both broke compatibility with cv_bridge/matplotlib)
-----------------------------------------------------------------------------
+- Built `detector_node`: YOLOv8 (pretrained) on live camera feed, publishing
+  detections as JSON on `/detected_objects`
+- Applied confidence threshold (>0.5) to filter noisy low-confidence
+  detections
+- Resolved dependency conflicts: pinned numpy==1.26.4 and
+  opencv-python==4.9.0.80 (newer versions broke compatibility with
+  cv_bridge/matplotlib)
 
 ## Week 3 — Agent Layer (interactive)
+Built `agent_node`: live typed instructions, combined with current
+detections, sent to an LLM with a system prompt constrained to structured
+JSON actions.
 
-### Architecture
-- `agent_node` subscribes to `/detected_objects`, accepts live typed instructions
-  via terminal input (background thread, non-blocking against ROS2's event loop)
-- Combines instruction + current detections, sends to Gemini (free tier,
-  gemini-3.1-flash-lite) with a system prompt constraining output to structured
-  JSON actions: move_forward / turn_left / turn_right / stop
-- Publishes resulting velocity commands to /cmd_vel
+**Problems encountered and solutions:**
+- **Message type mismatch:** `/cmd_vel` expected `TwistStamped`, not plain
+  `Twist`, due to how this Gazebo version's ROS2 bridge is wired. Diagnosed
+  with `ros2 topic info --verbose` rather than guessing; verified the fix
+  independently via `ros2 topic pub` before re-testing the full pipeline.
+- **Perception noise on synthetic objects:** YOLOv8 (trained on real photos)
+  gives unstable labels on Gazebo's simplified renders — a known sim-to-real
+  gap. Addressed with confidence filtering, a synonym-grouping system
+  (labels YOLO commonly confuses on similar shapes, e.g.
+  {cup, bottle, vase, bowl}, treated as equivalent matches), and detection
+  hysteresis (a target stays "confirmed" through a few missed frames before
+  the robot resumes searching).
+- **LLM API quota efficiency:** redesigned so the LLM is only called once a
+  target is confirmed found, not on every decision tick — search/explore
+  behavior is fully deterministic and free. Reduced real-world API usage
+  from one call every 5 seconds to roughly one call per successful find.
+- **Graceful degradation:** try/except fallback defaults to a sensible
+  action if the LLM call fails (quota exhaustion, network issue), verified
+  live during an actual quota-exhaustion event.
 
-### Problems encountered and how they were solved
+## Week 4 — Hardening, distance estimation, and demo
+- Added bounding-box-size-based distance estimation (`size_fraction`) so the
+  robot can judge proximity to its target from a 2D camera alone
+- Added a stop-when-close-enough condition, and a direct "stop" text command
+  that bypasses all other logic for immediate halt
+- Added a search timeout (robot gives up and stops after an extended,
+  unsuccessful search rather than running indefinitely)
+- Added a live status line each decision tick (instruction, found/not,
+  matched label, size, elapsed time) for easier debugging and demo clarity
+- **Bug found and fixed:** the LLM occasionally decided to "stop" on its own
+  reasoning before the robot was actually close, based on flawed inference
+  from the instruction wording. Fixed by removing the LLM's ability to
+  trigger a stop entirely — stopping is now controlled only by the
+  deterministic size-threshold check, with the LLM restricted to
+  approach/realignment decisions.
+- **Simulation performance constraint identified:** on this hardware (8GB
+  RAM), Gazebo's simulated clock runs meaningfully slower than real-time
+  under full load (perception + LLM + physics running together), making
+  long-distance approaches very slow in wall-clock time. Addressed
+  pragmatically for demo purposes by starting the robot at a realistic
+  working distance from the target, rather than chasing simulation
+  performance tuning under time constraints — documented here rather than
+  hidden.
+- **Confirmed working end-to-end and recorded on video:** full cycle —
+  search (scan + explore) → detect → approach → stop on arrival — working
+  correctly from a real starting position.
 
-**1. Message type mismatch (robot wouldn't move at all)**
-Initial version published `geometry_msgs/Twist` to /cmd_vel, but the robot never
-moved. Diagnosed with `ros2 topic info /cmd_vel --verbose`, which showed the
-Gazebo bridge (`ros_gz_bridge`) subscribes to `TwistStamped`, not plain `Twist` —
-a version-specific detail of this ROS2/Gazebo setup, not documented clearly
-anywhere obvious. Fixed by switching the publisher and message construction to
-`TwistStamped`, including a timestamp refreshed on every publish (stale
-timestamps are sometimes silently ignored).
-Verified the fix independently of the LLM using `ros2 topic pub` with a manual
-command, to isolate "is it a code bug" from "is it a quota/API issue" before
-re-testing the full pipeline.
+## Known Limitations
+- Exploration is a simple fixed scan-and-advance pattern, not real
+  frontier-based exploration — effective within a limited search radius,
+  not general-purpose maze solving
+- No obstacle-avoidance during search or approach (would require Nav2
+  costmap integration)
+- Distance estimation is a rough 2D proxy (bounding-box size), not true
+  depth sensing
+- Perception limited to YOLO's default training classes; no custom/
+  fine-tuned model yet
+- Gazebo's simulated clock runs below real-time under full system load on
+  this hardware, affecting demo pacing (see Week 4 notes above)
 
-**2. Perception noise on synthetic/simulated objects**
-YOLOv8 (pretrained on real-world photos) gives unstable, low-confidence, and
-often wrong labels on Gazebo's simplified 3D renders — a real, known problem in
-robotics called the sim-to-real / domain gap. A single test object (a can)
-was variously classified as cup, bottle, vase, refrigerator, stop sign,
-airplane, and person across different frames and angles.
-Addressed with:
-  - A confidence threshold (>0.5) to cut obvious noise
-  - A synonym-grouping system: labels that YOLO commonly confuses on similar-
-    shaped objects (e.g. {cup, bottle, vase, bowl}) are treated as equivalent
-    matches for a given instruction, rather than requiring an exact label match
-  - Detection hysteresis: once a target is confirmed found, a few consecutive
-    "missed" frames (label flicker) are tolerated before the robot resumes
-    searching, rather than reacting to every single frame's noisy guess
+## Future Plans / Continuation
+This project is intended to continue past the application deadline:
+- **Nav2 integration:** replace raw velocity commands with full Nav2 goals
+  for real obstacle-aware path planning
+- **Frontier-based exploration:** proper unknown-space exploration instead
+  of the current fixed scan pattern
+- **Depth/distance:** move from bounding-box-size proxy to real depth
+  sensing (stereo camera or depth sensor) for accurate proximity estimation
+- **Sim-to-real:** move from Gazebo simulation to a physical platform
+  (Raspberry Pi/Jetson Nano + RC chassis) to validate the pipeline on real
+  hardware
+- **Structured trial logging:** CSV-based logging of trial outcomes
+  (success/fail, time, distance) for rigorous performance reporting
+- **Fine-tuned perception:** train YOLO on a small custom dataset to fix the
+  sim-to-real detection noise documented in Week 3
+- **Terramechanics integration:** connect a parallel MATLAB-based tire/
+  terrain analysis project (tread design for low-traction surfaces, modeled
+  via Bekker terramechanics) to Gazebo's terrain physics, testing navigation
+  performance across simulated soft/firm terrain — bridging automobile
+  engineering coursework with the robotics stack built here
 
-**3. LLM API quota efficiency**
-Initial version called the LLM every 5 seconds regardless of whether anything
-had changed, burning through the free-tier daily quota (500 requests) quickly
-during iterative testing.
-Redesigned so the LLM is only called when the target is actually confirmed
-found — while searching, the robot rotates using simple deterministic logic
-(no API call, free and instant). This cut API usage dramatically and is also a
-better architectural pattern in general: reasoning should be reserved for
-genuinely ambiguous decisions, not repetitive/mechanical ones.
+## Why This Project
+Robotics and autonomous-vehicle research increasingly combines classical
+perception/control pipelines with AI-driven decision-making — vision-
+language-action models, agentic navigation, and LLM-assisted robot control
+are active areas across mechanical and robotics engineering labs. This
+project was built to gain hands-on experience with that exact pattern:
+implementing it from scratch surfaces the real engineering tradeoffs —
+perception noise, decision latency, API cost/efficiency, graceful failure
+handling — that matter in this kind of system. 
 
-**4. Graceful degradation on API failure**
-Added a try/except fallback: if the LLM call fails (quota exhausted, network
-issue, malformed response), the agent defaults to a sensible action
-(move_forward, if the target is already confirmed found) rather than crashing
-or freezing. Verified this in practice when a live quota-exhaustion event
-occurred mid-test — the robot continued behaving sensibly instead of stalling.
+## Demo
+[Link to demo video to be added]
 
-### Confirmed working end-to-end
-Full cycle demonstrated live: typed instruction -> deterministic search
-(rotating, no API calls) -> object detected -> LLM-driven approach decision ->
-robot drives to the object and stops nearby.
-
-## Known limitations / next steps
-- No distance/proximity estimation yet — the robot currently loses sight of
-  the target once very close (object exits camera frame), which then
-  incorrectly triggers renewed searching. Planned fix: estimate distance from
-  detection bounding box size, and stop once the box crosses a size threshold,
-  rather than relying on continuous detection all the way to arrival.
-- No obstacle-aware path planning yet — agent issues raw velocity commands,
-  not full Nav2 goals (would need Nav2 integration for real path planning
-  around obstacles)
-- Perception is english-object-only; no attempt yet to handle instructions
-  referring to objects not in YOLO's default training classes
+Full working cycle demonstrated: typed instruction -> deterministic search
+(scan + explore, no API calls) -> object detected -> LLM-driven approach
+decision -> robot drives to the object and stops on arrival.
