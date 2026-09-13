@@ -59,15 +59,17 @@ The main research and engineering interest is the **perception-to-reasoning inte
 flowchart LR
     A[Human Instruction] --> B[Agent Node]
     C[Robot Camera] --> D[YOLOv8 Perception]
-    D -->|/detected_objects| B
+    D -->|detected_objects| B
     B --> E{Target Found?}
     E -->|No| F[Deterministic Search]
     E -->|Yes| G[LLM Reasoning]
-    F --> H[/cmd_vel]
+    F --> H[cmd_vel Topic]
     G --> H
-    H --> I[Gazebo / TurtleBot3]
+    H --> I[Gazebo TurtleBot3]
     I --> C
 ```
+
+The `/cmd_vel` topic is represented as `cmd_vel Topic` in the diagram so GitHub's Mermaid parser does not interpret the leading slash as shape syntax. GitHub supports Mermaid diagrams inside Markdown files when the syntax is valid. urlGitHub Mermaid diagram documentationhttps://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-diagrams
 
 ### 1. Perception Layer
 
@@ -395,6 +397,8 @@ The project is therefore progressing toward:
 
 > **Simulation → Integrated software stack → Physical DRISHTI rover → Autonomous physical system**
 
+> **DRISHTI GitHub repository:** _link to be added once the correct repository URL is provided._
+
 ---
 
 ## Repository Structure
@@ -506,17 +510,23 @@ A full simulated demonstration has been recorded showing the current end-to-end 
 
 **instruction → search → detection → target confirmation → agentic approach → arrival → stop**
 
-### Video note
+### Demo GIF / Video
 
-GitHub is **not a reliable place to embed an external YouTube-style player directly inside a repository README**. The safest README presentation is to use a thumbnail/GIF with a link to the video, or link directly to an `.mp4` stored with the project. GitHub supports video files such as `.mp4`, `.mov` and `.webm`, with browser/codec compatibility considerations. citeturn0search4turn0search5
-
-When the final demo video is added, this section can be changed to:
+The README is prepared for a short animated GIF preview. Once the GIF is added to the repository at `assets/demo.gif`, it can be displayed directly in this section with:
 
 ```markdown
-[▶️ Watch the full rover demonstration](PATH_OR_VIDEO_LINK)
+<p align="center">
+  <img src="assets/demo.gif" alt="Agentic Autonomous Rover demonstration" width="800">
+</p>
 ```
 
-A short GIF preview can also be placed above the link for an immediate visual overview.
+For the full-resolution demonstration, add the actual video URL or repository video path when it is available:
+
+```markdown
+[▶️ Watch the full rover demonstration](YOUR_ACTUAL_VIDEO_LINK)
+```
+
+GitHub does not provide a reliable YouTube-style embedded player for an external video inside a repository README. A GIF preview plus a link to the full video is therefore the cleanest README presentation. GitHub also supports Mermaid diagrams directly in Markdown files. urlGitHub Markdown and Mermaid documentationhttps://docs.github.com/en/repositories/working-with-files/using-files/working-with-non-code-files
 
 ---
 
