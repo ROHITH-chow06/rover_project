@@ -1,147 +1,557 @@
-# Agentic Autonomous Rover
+# 🤖 Agentic Autonomous Rover
 
-## Project Brief
-A simulated rover that combines classical robotics perception/control with an
-LLM-based reasoning layer, so it can carry out plain-language instructions
-("find a cup and go to it") rather than pre-programmed waypoints.
+> **An evolving autonomous robotics platform combining computer vision, agentic AI reasoning, ROS 2 and robot control — currently validated in simulation and being developed toward physical rover deployment.**
 
-## Tech Stack
-- **OS / middleware:** Ubuntu 24.04, ROS2 Jazzy
-- **Simulation:** Gazebo Sim (via ros_gz)
-- **Perception:** YOLOv8 (Ultralytics), OpenCV, cv_bridge
-- **Reasoning layer:** Google Gemini API (gemini-3.1-flash-lite, free tier)
-- **Language:** Python 3.12
-- **Version control:** Git / GitHub
+**Status:** 🚧 Active / Continuing Development  
+**Current platform:** ROS 2 Jazzy + Gazebo Sim + TurtleBot3  
+**Future physical platform:** DRISHTI rover
 
-## Architecture
-1. **Perception** (`detector_node`) — subscribes to the robot's camera feed,
-   runs YOLOv8 object detection, publishes structured JSON (label,
-   confidence, bounding-box size as a distance proxy) on `/detected_objects`
-2. **Reasoning** (`agent_node`) — accepts live typed instructions, tracks
-   current detections, and calls an LLM only when a target is genuinely
-   found (not on every tick) to decide how to approach it
-3. **Exploration** — deterministic scan-and-advance search pattern when no
-   target is in view (no LLM call, free and instant)
-4. **Control** — decisions converted to `TwistStamped` velocity commands
-   published to `/cmd_vel`, driving the robot in Gazebo
+---
 
-## Week 1 — Environment Setup
-- ROS2 Jazzy + Gazebo + Nav2 installed on Ubuntu 24.04
-- TurtleBot3 sim running, keyboard teleop working
-- Nav2 autonomous navigation confirmed working: AMCL localizes the robot via
-  particle-filter matching of lidar data to a map, Nav2 plans a path to a
-  clicked goal
+## Overview
 
-## Week 2 — Perception
-- Added custom ROS2 package `rover_perception`
-- Camera feed confirmed working via rqt_image_view
-- Built `detector_node`: YOLOv8 (pretrained) on live camera feed, publishing
-  detections as JSON on `/detected_objects`
-- Applied confidence threshold (>0.5) to filter noisy low-confidence
-  detections
-- Resolved dependency conflicts: pinned numpy==1.26.4 and
-  opencv-python==4.9.0.80 (newer versions broke compatibility with
-  cv_bridge/matplotlib)
+The **Agentic Autonomous Rover** explores how a mobile robot can move beyond fixed waypoints and hard-coded task sequences by combining:
 
-## Week 3 — Agent Layer (interactive)
-Built `agent_node`: live typed instructions, combined with current
-detections, sent to an LLM with a system prompt constrained to structured
-JSON actions.
+- **Visual perception** for understanding the robot's surroundings
+- **Natural-language instructions** for high-level task specification
+- **Agentic LLM reasoning** for context-aware local decisions
+- **ROS 2** for modular robot-system communication
+- **Deterministic control and safety logic** for execution-critical behaviour
+- **Simulation-first development** before transition to physical hardware
 
-**Problems encountered and solutions:**
-- **Message type mismatch:** `/cmd_vel` expected `TwistStamped`, not plain
-  `Twist`, due to how this Gazebo version's ROS2 bridge is wired. Diagnosed
-  with `ros2 topic info --verbose` rather than guessing; verified the fix
-  independently via `ros2 topic pub` before re-testing the full pipeline.
-- **Perception noise on synthetic objects:** YOLOv8 (trained on real photos)
-  gives unstable labels on Gazebo's simplified renders — a known sim-to-real
-  gap. Addressed with confidence filtering, a synonym-grouping system
-  (labels YOLO commonly confuses on similar shapes, e.g.
-  {cup, bottle, vase, bowl}, treated as equivalent matches), and detection
-  hysteresis (a target stays "confirmed" through a few missed frames before
-  the robot resumes searching).
-- **LLM API quota efficiency:** redesigned so the LLM is only called once a
-  target is confirmed found, not on every decision tick — search/explore
-  behavior is fully deterministic and free. Reduced real-world API usage
-  from one call every 5 seconds to roughly one call per successful find.
-- **Graceful degradation:** try/except fallback defaults to a sensible
-  action if the LLM call fails (quota exhaustion, network issue), verified
-  live during an actual quota-exhaustion event.
+The current prototype can receive an instruction such as:
 
-## Week 4 — Hardening, distance estimation, and demo
-- Added bounding-box-size-based distance estimation (`size_fraction`) so the
-  robot can judge proximity to its target from a 2D camera alone
-- Added a stop-when-close-enough condition, and a direct "stop" text command
-  that bypasses all other logic for immediate halt
-- Added a search timeout (robot gives up and stops after an extended,
-  unsuccessful search rather than running indefinitely)
-- Added a live status line each decision tick (instruction, found/not,
-  matched label, size, elapsed time) for easier debugging and demo clarity
-- **Bug found and fixed:** the LLM occasionally decided to "stop" on its own
-  reasoning before the robot was actually close, based on flawed inference
-  from the instruction wording. Fixed by removing the LLM's ability to
-  trigger a stop entirely — stopping is now controlled only by the
-  deterministic size-threshold check, with the LLM restricted to
-  approach/realignment decisions.
-- **Simulation performance constraint identified:** on this hardware (8GB
-  RAM), Gazebo's simulated clock runs meaningfully slower than real-time
-  under full load (perception + LLM + physics running together), making
-  long-distance approaches very slow in wall-clock time. Addressed
-  pragmatically for demo purposes by starting the robot at a realistic
-  working distance from the target, rather than chasing simulation
-  performance tuning under time constraints — documented here rather than
-  hidden.
-- **Confirmed working end-to-end and recorded on video:** full cycle —
-  search (scan + explore) → detect → approach → stop on arrival — working
-  correctly from a real starting position.
+```text
+find a cup and go to it
+```
+
+The rover searches its environment, detects candidate objects through its camera, determines whether the requested target has been found, uses the reasoning layer to choose an approach direction, and drives toward the target until a deterministic arrival condition is satisfied.
+
+This is **not a finished autonomous rover**. The current implementation is a foundation for continued development toward stronger navigation, richer perception, more capable agentic planning, and eventual integration with the **DRISHTI physical rover platform**.
+
+---
+
+## Project Vision
+
+The long-term goal is to develop a robotics architecture in which:
+
+**Human instruction**  
+↓  
+**Perception**  
+↓  
+**World / target understanding**  
+↓  
+**Agentic reasoning**  
+↓  
+**Navigation and action selection**  
+↓  
+**Deterministic control / safety**  
+↓  
+**Autonomous rover**
+
+The main research and engineering interest is the **perception-to-reasoning interface**: how uncertain visual information and a high-level task can be transformed into grounded robot actions without allowing a probabilistic language model to directly control safety-critical behaviour.
+
+---
+
+## Current Architecture
+
+```mermaid
+flowchart LR
+    A[Human Instruction] --> B[Agent Node]
+    C[Robot Camera] --> D[YOLOv8 Perception]
+    D -->|/detected_objects| B
+    B --> E{Target Found?}
+    E -->|No| F[Deterministic Search]
+    E -->|Yes| G[LLM Reasoning]
+    F --> H[/cmd_vel]
+    G --> H
+    H --> I[Gazebo / TurtleBot3]
+    I --> C
+```
+
+### 1. Perception Layer
+
+`detector_node` subscribes to the simulated camera stream:
+
+```text
+/camera/image_raw
+```
+
+The node:
+
+1. Receives ROS image messages.
+2. Converts them through `cv_bridge` into OpenCV frames.
+3. Runs **YOLOv8n** using Ultralytics.
+4. Filters detections below a confidence threshold of `0.5`.
+5. Calculates a bounding-box area fraction as a rough proximity signal.
+6. Publishes structured JSON detections to:
+
+```text
+/detected_objects
+```
+
+Each detection contains information such as:
+
+```json
+{
+  "label": "cup",
+  "confidence": 0.82,
+  "size_fraction": 0.064
+}
+```
+
+### 2. Agentic Reasoning Layer
+
+`agent_node` combines:
+
+- The current natural-language instruction
+- Current visual detections
+- Target matching information
+- Target confirmation state
+
+When a target is confirmed, the system sends the relevant context to the Gemini model and requests a structured action.
+
+The model is constrained to return one of:
+
+```text
+move_forward
+turn_left
+turn_right
+```
+
+The response is parsed as JSON and converted into a robot motion command.
+
+### 3. Deterministic Search
+
+The rover does **not** call the LLM continuously while searching.
+
+When the target is not visible, the current prototype uses a deterministic scan-and-advance behaviour. This makes exploration predictable, reduces unnecessary API calls, and keeps basic search behaviour independent of model availability.
+
+### 4. Deterministic Safety Boundary
+
+A major architectural decision in the current system is that the LLM **cannot issue the final stop command**.
+
+Stopping is handled by deterministic system logic when:
+
+- The target reaches the configured proximity threshold
+- The operator enters `stop`
+- The search exceeds its timeout
+
+This separates probabilistic reasoning from a safety-sensitive control decision.
+
+---
+
+## Current Technology Stack
+
+| Layer | Technology |
+|---|---|
+| Operating System | Ubuntu 24.04 |
+| Robotics Middleware | ROS 2 Jazzy |
+| Simulation | Gazebo Sim / `ros_gz` |
+| Robot | TurtleBot3 simulation |
+| Perception | YOLOv8n / Ultralytics |
+| Image Processing | OpenCV |
+| ROS Image Bridge | `cv_bridge` |
+| Agent / Reasoning | Google Gemini API |
+| Programming | Python 3.12 |
+| Messaging | ROS 2 topics / `TwistStamped` |
+| Version Control | Git / GitHub |
+
+---
+
+## Current Development Milestones
+
+### Phase 1 — Environment and Robotics Setup
+
+- ROS 2 Jazzy environment established
+- Gazebo simulation configured
+- TurtleBot3 simulation brought up
+- Keyboard teleoperation verified
+- Nav2 environment explored and autonomous navigation confirmed as a foundation for future integration
+
+### Phase 2 — Perception
+
+- Created the custom `rover_perception` ROS 2 package
+- Connected the simulated camera
+- Added YOLOv8 object detection
+- Published structured detections through `/detected_objects`
+- Added confidence filtering
+
+### Phase 3 — Agent Layer
+
+- Added interactive natural-language instructions
+- Connected current detections to the agent node
+- Added semantic/synonym grouping for commonly confused object classes
+- Added target-confirmation hysteresis to tolerate intermittent missed detections
+- Added structured JSON output constraints for the LLM
+
+### Phase 4 — System Hardening
+
+- Diagnosed the `TwistStamped` command interface rather than assuming the message type
+- Added LLM failure fallback behaviour
+- Reduced unnecessary LLM calls
+- Added search timeout handling
+- Added live decision/status logging
+- Added deterministic arrival detection
+- Added an immediate manual stop path
+
+### Phase 5 — End-to-End Demonstration
+
+The current simulated system demonstrates the complete cycle:
+
+```text
+Instruction
+   ↓
+Search
+   ↓
+Object detected
+   ↓
+Target confirmed
+   ↓
+Agentic approach decision
+   ↓
+Rover moves toward target
+   ↓
+Deterministic arrival check
+   ↓
+Stop
+```
+
+---
+
+## Engineering Problems Solved
+
+### ROS 2 command message mismatch
+
+The robot command interface required `TwistStamped` rather than plain `Twist`. The issue was diagnosed through ROS topic inspection and independently verified with a manual ROS command before the complete pipeline was retested.
+
+### Synthetic perception noise
+
+The YOLO model was trained primarily on real-world imagery, while Gazebo provides simplified rendered scenes. This creates a practical simulation-domain perception problem.
+
+The current system addresses this through:
+
+- Confidence filtering
+- Synonym grouping
+- Target confirmation hysteresis
+
+### LLM API efficiency
+
+Calling the model on every decision cycle would be unnecessarily expensive and would introduce avoidable latency.
+
+The architecture therefore uses:
+
+> **Deterministic search → LLM only after target confirmation**
+
+This keeps the search process local and reduces model calls to meaningful decision points.
+
+### Graceful degradation
+
+LLM/API failures are handled through exception handling and a fallback motion behaviour rather than allowing a temporary API or network problem to completely freeze the rover.
+
+### Safety-related model behaviour
+
+During development, the LLM could occasionally infer that the robot should stop before it had actually reached the target. Instead of trying to make the language model responsible for this safety-sensitive decision, the architecture was changed so that:
+
+> **The LLM chooses approach direction; deterministic logic decides when to stop.**
+
+This is an important design principle for the continuing development of the system.
+
+### Simulation performance
+
+Running Gazebo physics, perception and AI processing together can make the simulated clock slower than real time on the current hardware. This is currently treated as a documented system constraint while the project focuses on architecture and functionality.
+
+---
+
+## Current Status
+
+| Component | Status | Current State |
+|---|---|---|
+| ROS 2 package | ✅ Implemented | Modular Python ROS 2 package |
+| Camera perception | ✅ Implemented | Simulated camera → OpenCV |
+| YOLOv8 detection | ✅ Implemented | Pretrained YOLOv8n |
+| Detection filtering | ✅ Implemented | Confidence threshold |
+| Target matching | ✅ Implemented | Semantic groups + hysteresis |
+| Natural-language instruction | ✅ Implemented | Interactive terminal input |
+| Agentic reasoning | ✅ Implemented | Gemini structured decisions |
+| Deterministic search | 🟡 Prototype | Fixed scan-and-advance behaviour |
+| Arrival detection | ✅ Implemented | Image-size proximity proxy |
+| Obstacle-aware navigation | 🔵 Planned | Nav2 integration |
+| Depth sensing | 🔵 Planned | Stereo/depth sensor direction |
+| Frontier exploration | 🔵 Planned | Replace fixed search |
+| Physical rover | 🔵 Planned | DRISHTI integration |
+| Large-scale evaluation | 🔵 Planned | Repeatable trials + metrics |
+
+---
 
 ## Known Limitations
-- Exploration is a simple fixed scan-and-advance pattern, not real
-  frontier-based exploration — effective within a limited search radius,
-  not general-purpose maze solving
-- No obstacle-avoidance during search or approach (would require Nav2
-  costmap integration)
-- Distance estimation is a rough 2D proxy (bounding-box size), not true
-  depth sensing
-- Perception limited to YOLO's default training classes; no custom/
-  fine-tuned model yet
-- Gazebo's simulated clock runs below real-time under full system load on
-  this hardware, affecting demo pacing (see Week 4 notes above)
 
-## Future Plans / Continuation
-This project is intended to continue past the application deadline:
-- **Nav2 integration:** replace raw velocity commands with full Nav2 goals
-  for real obstacle-aware path planning
-- **Frontier-based exploration:** proper unknown-space exploration instead
-  of the current fixed scan pattern
-- **Depth/distance:** move from bounding-box-size proxy to real depth
-  sensing (stereo camera or depth sensor) for accurate proximity estimation
-- **Sim-to-real:** move from Gazebo simulation to a physical platform
-  (Raspberry Pi/Jetson Nano + RC chassis) to validate the pipeline on real
-  hardware
-- **Structured trial logging:** CSV-based logging of trial outcomes
-  (success/fail, time, distance) for rigorous performance reporting
-- **Fine-tuned perception:** train YOLO on a small custom dataset to fix the
-  sim-to-real detection noise documented in Week 3
-- **Terramechanics integration:** connect a parallel MATLAB-based tire/
-  terrain analysis project (tread design for low-traction surfaces, modeled
-  via Bekker terramechanics) to Gazebo's terrain physics, testing navigation
-  performance across simulated soft/firm terrain — bridging automobile
-  engineering coursework with the robotics stack built here
+The current prototype is intentionally limited and is being used as a foundation for continued development.
 
-## Why This Project
-Robotics and autonomous-vehicle research increasingly combines classical
-perception/control pipelines with AI-driven decision-making — vision-
-language-action models, agentic navigation, and LLM-assisted robot control
-are active areas across mechanical and robotics engineering labs. This
-project was built to gain hands-on experience with that exact pattern:
-implementing it from scratch surfaces the real engineering tradeoffs —
-perception noise, decision latency, API cost/efficiency, graceful failure
-handling — that matter in this kind of system. 
+- Search is currently a fixed scan-and-advance pattern rather than frontier-based exploration.
+- The current approach controller does not yet provide complete obstacle avoidance.
+- Bounding-box size is only a rough 2D proximity estimate and is not true depth sensing.
+- YOLO uses its pretrained default classes and has not yet been fine-tuned for the project's simulated environment.
+- The current system is primarily validated through controlled simulation demonstrations rather than a large automated benchmark.
+- The current repository does not yet contain the physical DRISHTI implementation.
+- Simulation timing can degrade under the combined physics, perception and AI workload.
+
+These limitations are **development targets**, not hidden gaps.
+
+---
+
+## Roadmap
+
+### 🚧 Stage 1 — Strengthen the Simulation Stack
+
+- Improve ROS 2 node architecture
+- Improve perception robustness
+- Add better state tracking
+- Improve logging and reproducibility
+
+### 🧭 Stage 2 — Navigation
+
+- Integrate Nav2 more deeply
+- Replace raw local motion with navigation goals
+- Add obstacle-aware planning
+- Improve localization and recovery behaviours
+
+### 👁️ Stage 3 — Perception
+
+- Add depth sensing
+- Explore LiDAR integration
+- Improve target localization
+- Build a project-specific perception dataset
+- Fine-tune detection models where necessary
+
+### 🧠 Stage 4 — Agentic Intelligence
+
+- Improve the perception-to-agent interface
+- Maintain richer world/task state
+- Move beyond single-step approach decisions
+- Explore task decomposition and multi-step planning
+- Introduce stronger action validation before execution
+
+### 📊 Stage 5 — Evaluation
+
+Develop repeatable experiments measuring:
+
+- Target detection success
+- Task completion rate
+- Search time
+- Approach time
+- Arrival/proximity error
+- Missed detections
+- False detections
+- LLM latency and failure recovery
+- Navigation reliability
+
+### 🔧 Stage 6 — Physical Rover
+
+The validated simulation architecture will eventually be transferred to the **DRISHTI physical rover**.
+
+The planned transition includes:
+
+```text
+Gazebo simulation
+      ↓
+ROS 2 interface validation
+      ↓
+Physical sensors
+      ↓
+Onboard compute
+      ↓
+DRISHTI rover
+      ↓
+Real-world perception
+      ↓
+Agentic reasoning
+      ↓
+Autonomous navigation
+```
+
+The physical stage will be treated as a new validation phase rather than assuming that simulation behaviour will transfer perfectly to hardware.
+
+---
+
+## DRISHTI Integration Direction
+
+The long-term purpose of the current simulation is to establish a software architecture that can be transferred to a physical mobile platform.
+
+The DRISHTI rover is intended to become that physical platform.
+
+The integration will focus on:
+
+- ROS 2 hardware interfaces
+- Camera and additional sensor integration
+- Onboard compute
+- Physical velocity/control interfaces
+- Real-time perception
+- Agent-to-navigation interfaces
+- Safety and command validation
+- Controlled real-world experiments
+
+The project is therefore progressing toward:
+
+> **Simulation → Integrated software stack → Physical DRISHTI rover → Autonomous physical system**
+
+---
+
+## Repository Structure
+
+```text
+rover_project/
+├── README.md
+├── list_models.py
+├── test_gemini.py
+└── src/
+    └── rover_perception/
+        ├── package.xml
+        ├── setup.py
+        ├── setup.cfg
+        ├── resource/
+        │   └── rover_perception
+        ├── rover_perception/
+        │   ├── __init__.py
+        │   ├── detector_node.py
+        │   └── agent_node.py
+        └── test/
+            ├── test_copyright.py
+            ├── test_flake8.py
+            └── test_pep257.py
+```
+
+### Key Files
+
+| File | Purpose |
+|---|---|
+| `detector_node.py` | Camera processing and YOLOv8 detection |
+| `agent_node.py` | Instruction handling, target matching, reasoning and motion control |
+| `package.xml` | ROS 2 package metadata and dependencies |
+| `setup.py` | Python package configuration and ROS 2 entry points |
+| `test_gemini.py` | Gemini connectivity/model test |
+| `list_models.py` | Model listing utility |
+
+---
+
+## Installation
+
+### Prerequisites
+
+The current development environment is based on:
+
+- Ubuntu 24.04
+- ROS 2 Jazzy
+- Gazebo Sim
+- Python 3.12
+- TurtleBot3 simulation
+
+### Clone the repository
+
+```bash
+git clone https://github.com/ROHITH-chow06/rover_project.git
+cd rover_project
+```
+
+### Build the ROS 2 package
+
+```bash
+source /opt/ros/jazzy/setup.bash
+colcon build
+source install/setup.bash
+```
+
+### Run the perception node
+
+```bash
+ros2 run rover_perception detector_node
+```
+
+### Run the agent node
+
+```bash
+ros2 run rover_perception agent_node
+```
+
+The exact simulation launch sequence may evolve as the navigation and hardware architecture is expanded.
+
+---
+
+## Example Interaction
+
+A typical current interaction is:
+
+```text
+Instruction> find a cup and go to it
+```
+
+The system then:
+
+1. Begins deterministic search behaviour.
+2. Receives camera frames.
+3. Runs YOLOv8 detection.
+4. Publishes detected objects.
+5. Checks whether the requested target has been found.
+6. Confirms the target across detection frames.
+7. Sends the relevant state to the agentic reasoning layer.
+8. Receives a structured approach decision.
+9. Publishes velocity commands.
+10. Stops when the deterministic proximity condition is satisfied.
+
+---
 
 ## Demo
-[Link to demo video to be added]
 
-Full working cycle demonstrated: typed instruction -> deterministic search
-(scan + explore, no API calls) -> object detected -> LLM-driven approach
-decision -> robot drives to the object and stops on arrival.
+A full simulated demonstration has been recorded showing the current end-to-end cycle:
+
+**instruction → search → detection → target confirmation → agentic approach → arrival → stop**
+
+### Video note
+
+GitHub is **not a reliable place to embed an external YouTube-style player directly inside a repository README**. The safest README presentation is to use a thumbnail/GIF with a link to the video, or link directly to an `.mp4` stored with the project. GitHub supports video files such as `.mp4`, `.mov` and `.webm`, with browser/codec compatibility considerations. citeturn0search4turn0search5
+
+When the final demo video is added, this section can be changed to:
+
+```markdown
+[▶️ Watch the full rover demonstration](PATH_OR_VIDEO_LINK)
+```
+
+A short GIF preview can also be placed above the link for an immediate visual overview.
+
+---
+
+## Design Principles
+
+### 1. Simulation first, hardware second
+
+The system is being developed and debugged in simulation before being transferred to the DRISHTI physical platform.
+
+### 2. AI assists; deterministic logic constrains
+
+The language model is useful for interpreting context and selecting an approach action, but it is not treated as the authority for safety-critical stopping.
+
+### 3. Modular ROS 2 architecture
+
+Perception, reasoning and control are separated into components that communicate through ROS 2 interfaces.
+
+### 4. Failures are part of development
+
+Message mismatches, perception errors, API failures and simulation constraints are documented because they reveal the engineering work required for robust autonomy.
+
+### 5. The project remains open-ended
+
+The current implementation is a foundation. Navigation, sensing, agentic planning, evaluation and physical deployment are all active development directions.
+
+---
+
+## Project Status
+
+> **This project is actively being built.**
+>
+> The current simulation demonstrates the core perception → reasoning → action loop. The next development stages are focused on improving navigation, perception, safety, evaluation and eventually transferring the architecture to the DRISHTI physical rover.
+
+---
+
+## License
+
+License information will be added as the project is prepared for broader distribution.
