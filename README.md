@@ -69,8 +69,6 @@ flowchart LR
     I --> C
 ```
 
-The `/cmd_vel` topic is represented as `cmd_vel Topic` in the diagram so GitHub's Mermaid parser does not interpret the leading slash as shape syntax. GitHub supports Mermaid diagrams inside Markdown files when the syntax is valid. urlGitHub Mermaid diagram documentationhttps://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-diagrams
-
 ### 1. Perception Layer
 
 `detector_node` subscribes to the simulated camera stream:
@@ -406,6 +404,8 @@ The project is therefore progressing toward:
 ```text
 rover_project/
 ├── README.md
+├── assets/
+│   └── demo.gif
 ├── list_models.py
 ├── test_gemini.py
 └── src/
@@ -504,29 +504,21 @@ The system then:
 
 ---
 
-## Demo
+## 🎥 Demo
 
-A full simulated demonstration has been recorded showing the current end-to-end cycle:
+The current simulated demonstration shows the end-to-end cycle:
 
 **instruction → search → detection → target confirmation → agentic approach → arrival → stop**
 
-### Demo GIF / Video
+### Demo Preview
 
-The README is prepared for a short animated GIF preview. Once the GIF is added to the repository at `assets/demo.gif`, it can be displayed directly in this section with:
-
-```markdown
 <p align="center">
   <img src="assets/demo.gif" alt="Agentic Autonomous Rover demonstration" width="800">
 </p>
-```
 
-For the full-resolution demonstration, add the actual video URL or repository video path when it is available:
+### Full Demonstration Video
 
-```markdown
-[▶️ Watch the full rover demonstration](YOUR_ACTUAL_VIDEO_LINK)
-```
-
-GitHub does not provide a reliable YouTube-style embedded player for an external video inside a repository README. A GIF preview plus a link to the full video is therefore the cleanest README presentation. GitHub also supports Mermaid diagrams directly in Markdown files. urlGitHub Markdown and Mermaid documentationhttps://docs.github.com/en/repositories/working-with-files/using-files/working-with-non-code-files
+The GIF above is a short preview of the recorded simulation. The complete video can be added as a GitHub video or external video link when its final location is available.
 
 ---
 
